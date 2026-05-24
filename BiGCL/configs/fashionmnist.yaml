@@ -1,0 +1,12 @@
+# Fashion-MNIST — tuned best: ACC=0.7004±0.0109 (3-seed)
+dataset:
+  name: fashionmnist
+
+model:
+  n_clusters: 10
+  proj_dim: 128
+  feat_drop_rate: 0.5
+  w_ortho: 2.0
+
+loss:
+  w_entropy: 5.0

@@ -1,0 +1,12 @@
+# CIFAR-10 — tuned best: ACC=0.9209±0.0010 (3-seed)
+dataset:
+  name: cifar10
+
+model:
+  n_clusters: 10
+  proj_dim: 256
+  feat_drop_rate: 0.6
+  w_ortho: 0.0
+
+loss:
+  w_entropy: 3.0

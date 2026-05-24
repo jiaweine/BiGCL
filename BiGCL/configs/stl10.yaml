@@ -1,0 +1,12 @@
+# STL-10 — tuned best: ACC=0.9807±0.0003 (3-seed)
+dataset:
+  name: stl10
+
+model:
+  n_clusters: 10
+  proj_dim: 128
+  feat_drop_rate: 0.7
+  w_ortho: 1.0
+
+loss:
+  w_entropy: 7.0

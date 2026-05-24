@@ -1,0 +1,48 @@
+# BiGCL: Bipartite Graph Contrastive Learning for Image Clustering
+# Default configuration — single source of truth for ALL parameters.
+# Dataset-specific YAMLs override only the fields they need.
+
+seed: 42
+
+# Dataset
+dataset:
+  name: cifar10
+  data_dir: ./datasets
+  image_size: 224
+  num_workers: 4
+
+# CLIP backbone
+backbone:
+  clip_model_name: ViT-B-32
+  clip_pretrained: openai
+
+# Model architecture
+model:
+  n_clusters: 10
+  proj_dim: 256
+  feat_drop_rate: 0.4
+  w_ortho: 0.5
+
+# Loss
+loss:
+  w_entropy: 3.0
+
+# Training (Adam, constant LR, no weight decay)
+training:
+  epochs: 100
+  batch_size: 256
+  lr: 1.0e-3
+  weight_decay: 0.0
+
+# Self-training
+self_training:
+  enable: true
+  w_st: 0.5
+  initial_threshold: 0.9
+  final_threshold: 0.6
+  warmup_epochs: 10
+
+# Logging / output
+logging:
+  output_dir: ./results
+  use_wandb: false

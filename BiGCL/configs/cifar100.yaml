@@ -1,0 +1,15 @@
+# CIFAR-100 (20 superclasses) — tuned best: ACC=0.5701±0.0126 (3-seed)
+dataset:
+  name: cifar100
+
+model:
+  n_clusters: 20
+  proj_dim: 128
+  feat_drop_rate: 0.7
+  w_ortho: 0.0
+
+loss:
+  w_entropy: 3.0
+
+self_training:
+  w_st: 0.1

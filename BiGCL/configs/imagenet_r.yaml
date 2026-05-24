@@ -1,0 +1,23 @@
+# ImageNet-R configuration
+dataset:
+  name: imagenet_r
+  image_size: 224
+  strong_aug: true
+
+model:
+  clip_model_name: ViT-L-14
+  n_clusters: 200
+  gnn_layers: 4
+  gnn_top_k: 10
+  proj_dim: 512
+  n_ctx: 8
+
+loss:
+  w_entropy: 1.0
+  w_uniform: 1.0
+
+training:
+  epochs: 100
+  batch_size: 128
+  lr: 5.0e-4
+  warmup_epochs: 5
