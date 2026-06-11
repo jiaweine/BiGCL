@@ -122,7 +122,7 @@ def main():
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
 
     # Load checkpoint
-    ckpt = torch.load(args.checkpoint, map_location=device)
+    ckpt = torch.load(args.checkpoint, map_location=device, weights_only=False)
     cfg = ckpt["config"]
 
     save_dir = args.save_dir or os.path.dirname(args.checkpoint)
