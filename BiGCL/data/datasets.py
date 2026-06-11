@@ -5,13 +5,16 @@ Tiny-ImageNet, and custom image folder datasets.
 """
 
 import os
+import logging
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
-from torchvision import datasets
+from torchvision import datasets, transforms
 from PIL import Image
 
 from .augmentations import CLIPAugmentation
+
+logger = logging.getLogger(__name__)
 
 
 class ClusteringDataset(Dataset):
@@ -32,6 +35,10 @@ class ClusteringDataset(Dataset):
         elif hasattr(base_dataset, "labels"):
             self.targets = np.array(base_dataset.labels)
         else:
+            logger.warning(
+                "Base dataset has no 'targets' or 'labels' attribute; "
+                "ground-truth labels will be unavailable for evaluation."
+            )
             self.targets = None
 
     def __len__(self):
@@ -69,6 +76,10 @@ class EvalDataset(Dataset):
         elif hasattr(base_dataset, "labels"):
             self.targets = np.array(base_dataset.labels)
         else:
+            logger.warning(
+                "Base dataset has no 'targets' or 'labels' attribute; "
+                "ground-truth labels will be unavailable for evaluation."
+            )
             self.targets = None
 
     def __len__(self):
@@ -79,13 +90,20 @@ class EvalDataset(Dataset):
 
         if self.transform is not None:
             if isinstance(img, torch.Tensor):
-                from torchvision import transforms as T
-                img = T.ToPILImage()(img)
+                img = transforms.ToPILImage()(img)
             if img.mode != 'RGB':
                 img = img.convert('RGB')
             img = self.transform(img)
 
         return {"image": img, "label": label, "index": idx}
+
+
+def _validate_image_dir(img_dir: str, dataset_name: str) -> None:
+    """Raise FileNotFoundError if an image directory does not exist."""
+    if not os.path.isdir(img_dir):
+        raise FileNotFoundError(
+            f"Image directory for dataset '{dataset_name}' not found: {img_dir}"
+        )
 
 
 def build_dataset(
@@ -111,6 +129,7 @@ def build_dataset(
     augmentation = CLIPAugmentation(image_size=image_size, strong=strong_aug)
     is_train = split == "train"
 
+    name = name.lower()
     if name == "fashionmnist":
         base = datasets.FashionMNIST(
             root=data_dir, train=is_train, download=True
@@ -129,9 +148,24 @@ def build_dataset(
         import pickle as _pkl
         _split_file = "train" if is_train else "test"
         _meta_path = os.path.join(data_dir, "cifar-100-python", _split_file)
-        with open(_meta_path, "rb") as _f:
-            _coarse = _pkl.load(_f, encoding="bytes")[b"coarse_labels"]
-        base.targets = _coarse
+        if not os.path.isfile(_meta_path):
+            raise FileNotFoundError(
+                f"CIFAR-100 metadata file not found at {_meta_path}. "
+                f"Ensure the dataset has been downloaded to '{data_dir}'."
+            )
+        try:
+            with open(_meta_path, "rb") as _f:
+                _meta = _pkl.load(_f, encoding="bytes")
+        except (OSError, _pkl.UnpicklingError) as exc:
+            raise RuntimeError(
+                f"Failed to read CIFAR-100 metadata from {_meta_path}: {exc}"
+            ) from exc
+        if b"coarse_labels" not in _meta:
+            raise KeyError(
+                f"CIFAR-100 metadata at {_meta_path} does not contain "
+                f"'coarse_labels'. Available keys: {list(_meta.keys())}"
+            )
+        base.targets = _meta[b"coarse_labels"]
         n_clusters = 20
     elif name == "cifar100_full":
         base = datasets.CIFAR100(
@@ -147,23 +181,28 @@ def build_dataset(
     elif name == "imagenet10":
         # Subset of ImageNet with 10 classes
         img_dir = os.path.join(data_dir, "imagenet10", split)
+        _validate_image_dir(img_dir, name)
         base = datasets.ImageFolder(root=img_dir)
         n_clusters = 10
     elif name == "imagenet_dogs":
         img_dir = os.path.join(data_dir, "imagenet_dogs", split)
+        _validate_image_dir(img_dir, name)
         base = datasets.ImageFolder(root=img_dir)
         n_clusters = 15
     elif name == "tinyimagenet":
         img_dir = os.path.join(data_dir, "tiny-imagenet-200", split)
+        _validate_image_dir(img_dir, name)
         base = datasets.ImageFolder(root=img_dir)
         n_clusters = 200
     elif name == "imagenet_r":
         img_dir = os.path.join(data_dir, "imagenet-r")
+        _validate_image_dir(img_dir, name)
         base = datasets.ImageFolder(root=img_dir)
         n_clusters = 200
     else:
         # Custom image folder
         img_dir = os.path.join(data_dir, name, split)
+        _validate_image_dir(img_dir, name)
         base = datasets.ImageFolder(root=img_dir)
         n_classes = len(base.classes)
         n_clusters = n_classes
