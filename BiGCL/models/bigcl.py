@@ -20,6 +20,7 @@ Complexity: O(B²·D + B·K·D) — dominated by InfoNCE (B²·D).
 Parameters: ~397K vs ~730K (old BiGCL) for D=256, K=10. 45% reduction.
 """
 
+import logging
 import math
 
 import torch
@@ -28,6 +29,8 @@ import torch.nn.functional as F
 
 from .clip_backbone import CLIPBackbone
 from .losses import BiGCLLoss
+
+logger = logging.getLogger(__name__)
 
 
 class BiGCL(nn.Module):
@@ -63,6 +66,15 @@ class BiGCL(nn.Module):
         **kwargs,
     ):
         super().__init__()
+
+        _known_kwargs = {"ortho_init"}
+        _unknown = set(kwargs) - _known_kwargs
+        if _unknown:
+            logger.warning(
+                f"BiGCL received unknown keyword arguments (possibly "
+                f"misspelled): {sorted(_unknown)}. These will be ignored."
+            )
+
         self.n_clusters = n_clusters
         self.proj_dim = proj_dim
         self.feat_drop_rate = feat_drop_rate

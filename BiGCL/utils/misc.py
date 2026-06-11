@@ -62,10 +62,36 @@ def load_checkpoint(
     strict: bool = True,
 ) -> dict:
     """Load training checkpoint."""
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
-    model.load_state_dict(checkpoint["model_state_dict"], strict=strict)
-    if optimizer is not None and "optimizer_state_dict" in checkpoint:
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    if not os.path.isfile(checkpoint_path):
+        raise FileNotFoundError(
+            f"Checkpoint not found: '{checkpoint_path}'"
+        )
+    try:
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    except (RuntimeError, EOFError) as exc:
+        raise RuntimeError(
+            f"Failed to load checkpoint '{checkpoint_path}' "
+            f"(file may be corrupted): {exc}"
+        ) from exc
+    if "model_state_dict" not in checkpoint:
+        raise KeyError(
+            f"Checkpoint '{checkpoint_path}' is missing 'model_state_dict'. "
+            f"Available keys: {list(checkpoint.keys())}"
+        )
+    try:
+        model.load_state_dict(checkpoint["model_state_dict"], strict=strict)
+    except RuntimeError as exc:
+        raise RuntimeError(
+            f"State dict mismatch when loading '{checkpoint_path}': {exc}"
+        ) from exc
+    if optimizer is not None:
+        if "optimizer_state_dict" in checkpoint:
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        else:
+            logger.warning(
+                "Checkpoint missing 'optimizer_state_dict'; "
+                "optimizer state will not be restored."
+            )
     logger.info(f"Loaded checkpoint from {checkpoint_path}")
     return checkpoint
 
@@ -110,7 +136,9 @@ def get_logger(name: str, log_file: str = None, level=logging.INFO) -> logging.L
     log.addHandler(ch)
 
     if log_file is not None:
-        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        log_dir = os.path.dirname(log_file)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
         fh = logging.FileHandler(log_file)
         fh.setFormatter(formatter)
         log.addHandler(fh)

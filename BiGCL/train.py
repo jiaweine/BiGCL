@@ -8,6 +8,7 @@ Usage:
 import os
 import sys
 import argparse
+import pickle
 import time
 import logging
 
@@ -53,13 +54,36 @@ def parse_args():
 def load_config(args):
     """Load YAML config and apply CLI overrides."""
     # Load default config
-    with open("configs/default.yaml", "r") as f:
-        cfg = yaml.safe_load(f)
+    default_path = "configs/default.yaml"
+    if not os.path.isfile(default_path):
+        raise FileNotFoundError(
+            f"Default config not found at '{default_path}'. "
+            f"Run from the project root directory (BiGCL/)."
+        )
+    try:
+        with open(default_path, "r") as f:
+            cfg = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"Failed to parse default config '{default_path}': {exc}") from exc
+
+    if cfg is None:
+        raise ValueError(f"Default config '{default_path}' is empty.")
 
     # Load dataset-specific config and merge
     if args.config != "configs/default.yaml":
-        with open(args.config, "r") as f:
-            override = yaml.safe_load(f)
+        if not os.path.isfile(args.config):
+            raise FileNotFoundError(
+                f"Config file not found: '{args.config}'"
+            )
+        try:
+            with open(args.config, "r") as f:
+                override = yaml.safe_load(f)
+        except yaml.YAMLError as exc:
+            raise ValueError(
+                f"Failed to parse config '{args.config}': {exc}"
+            ) from exc
+        if override is None:
+            raise ValueError(f"Config file '{args.config}' is empty.")
         for section, values in override.items():
             if isinstance(values, dict) and section in cfg:
                 cfg[section].update(values)
@@ -344,9 +368,35 @@ def main():
     best_acc = 0.0
     global_step = 0
     if args.resume:
-        ckpt = torch.load(args.resume, map_location=device)
-        model.load_state_dict(ckpt["model_state_dict"])
-        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        if not os.path.isfile(args.resume):
+            raise FileNotFoundError(
+                f"Resume checkpoint not found: '{args.resume}'"
+            )
+        try:
+            ckpt = torch.load(args.resume, map_location=device)
+        except (RuntimeError, EOFError, pickle.UnpicklingError) as exc:
+            raise RuntimeError(
+                f"Failed to load checkpoint '{args.resume}': {exc}"
+            ) from exc
+        if "model_state_dict" not in ckpt:
+            raise KeyError(
+                f"Checkpoint '{args.resume}' is missing 'model_state_dict'. "
+                f"Available keys: {list(ckpt.keys())}"
+            )
+        try:
+            model.load_state_dict(ckpt["model_state_dict"])
+        except RuntimeError as exc:
+            raise RuntimeError(
+                f"State dict mismatch when loading '{args.resume}'. "
+                f"Ensure the checkpoint matches the current model architecture: {exc}"
+            ) from exc
+        if "optimizer_state_dict" in ckpt:
+            optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+        else:
+            logger.warning(
+                "Checkpoint missing 'optimizer_state_dict'; "
+                "optimizer state will not be restored."
+            )
         start_epoch = ckpt.get("epoch", 0) + 1
         best_acc = ckpt.get("best_acc", 0.0)
         global_step = ckpt.get("global_step", 0)
@@ -365,6 +415,9 @@ def main():
             wandb.init(project=cfg["logging"]["wandb_project"], name=exp_name, config=cfg)
         except ImportError:
             logger.warning("wandb not installed, skipping")
+            cfg["logging"]["use_wandb"] = False
+        except Exception as exc:
+            logger.warning(f"wandb initialization failed: {exc}")
             cfg["logging"]["use_wandb"] = False
 
     # Training loop

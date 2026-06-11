@@ -10,6 +10,7 @@ Usage:
 
 import os
 import argparse
+import pickle
 import numpy as np
 import torch
 import yaml
@@ -122,7 +123,23 @@ def main():
     device = torch.device(f"cuda:{args.gpu}" if torch.cuda.is_available() else "cpu")
 
     # Load checkpoint
-    ckpt = torch.load(args.checkpoint, map_location=device)
+    if not os.path.isfile(args.checkpoint):
+        raise FileNotFoundError(
+            f"Checkpoint file not found: '{args.checkpoint}'"
+        )
+    try:
+        ckpt = torch.load(args.checkpoint, map_location=device)
+    except (RuntimeError, EOFError, pickle.UnpicklingError) as exc:
+        raise RuntimeError(
+            f"Failed to load checkpoint '{args.checkpoint}': {exc}"
+        ) from exc
+
+    for required_key in ("config", "model_state_dict"):
+        if required_key not in ckpt:
+            raise KeyError(
+                f"Checkpoint '{args.checkpoint}' is missing required key "
+                f"'{required_key}'. Available keys: {list(ckpt.keys())}"
+            )
     cfg = ckpt["config"]
 
     save_dir = args.save_dir or os.path.dirname(args.checkpoint)
@@ -139,7 +156,13 @@ def main():
 
     # Build model
     model = build_model_from_config(cfg, device)
-    model.load_state_dict(ckpt["model_state_dict"])
+    try:
+        model.load_state_dict(ckpt["model_state_dict"])
+    except RuntimeError as exc:
+        raise RuntimeError(
+            f"State dict mismatch when loading '{args.checkpoint}'. "
+            f"Ensure the checkpoint matches the current model architecture: {exc}"
+        ) from exc
     logger.info("Model loaded successfully")
 
     # Build evaluation dataset
