@@ -12,12 +12,11 @@ import os
 import argparse
 import numpy as np
 import torch
-import yaml
-from tqdm import tqdm
 
-from models.bigcl import BiGCL
+from models.factory import build_model_from_config
 from data.datasets import build_dataset, build_dataloader
-from utils.metrics import evaluate_clustering
+from utils.evaluation import extract_all_features
+from utils.metrics import evaluate_clustering, hungarian_match
 from utils.misc import set_seed, get_logger
 
 
@@ -32,79 +31,9 @@ def parse_args():
     return parser.parse_args()
 
 
-def build_model_from_config(cfg, device):
-    """Build model from saved config dict."""
-    model_cfg = cfg["model"]
-    loss_cfg = cfg["loss"]
-
-    model = BiGCL(
-        clip_model_name=model_cfg["clip_model_name"],
-        clip_pretrained=model_cfg["clip_pretrained"],
-        n_clusters=model_cfg["n_clusters"],
-        proj_dim=model_cfg["proj_dim"],
-        n_ctx=model_cfg["n_ctx"],
-        gnn_layers=model_cfg["gnn_layers"],
-        gnn_heads=model_cfg["gnn_heads"],
-        gnn_top_k=model_cfg["gnn_top_k"],
-        gnn_temperature=model_cfg["gnn_temperature"],
-        feat_drop_rate=model_cfg["feat_drop_rate"],
-        edge_drop_rate=model_cfg["edge_drop_rate"],
-        sinkhorn_iters=model_cfg["sinkhorn_iters"],
-        node_temperature=loss_cfg["node_temperature"],
-        cross_temperature=loss_cfg["cross_temperature"],
-        graph_temperature=loss_cfg["graph_temperature"],
-        w_node=loss_cfg["w_node"],
-        w_cross=loss_cfg["w_cross"],
-        w_graph=loss_cfg["w_graph"],
-        w_uniform=loss_cfg["w_uniform"],
-        w_entropy=loss_cfg["w_entropy"],
-        w_self_train=loss_cfg["w_self_train"],
-        use_momentum=model_cfg["use_momentum"],
-        base_momentum=model_cfg["base_momentum"],
-        dropout=model_cfg["dropout"],
-    )
-    return model.to(device)
-
-
-@torch.no_grad()
-def extract_all_features(model, data_loader, device):
-    """Extract features, predictions, and labels from the entire dataset."""
-    model.eval()
-    all_features = []
-    all_preds = []
-    all_labels = []
-    all_assignments = []
-
-    for batch in tqdm(data_loader, desc="Extracting features"):
-        images = batch["image"].to(device)
-        labels = batch["label"]
-
-        out = model.extract_features(images)
-
-        all_features.append(out["features"].cpu().numpy())
-        all_preds.append(out["hard_labels"].cpu().numpy())
-        all_assignments.append(out["assignments"].cpu().numpy())
-        all_labels.append(labels.numpy())
-
-    return {
-        "features": np.concatenate(all_features),
-        "predictions": np.concatenate(all_preds),
-        "assignments": np.concatenate(all_assignments),
-        "labels": np.concatenate(all_labels),
-    }
-
-
 def compute_per_class_accuracy(y_true, y_pred, n_classes):
     """Compute per-class clustering accuracy after Hungarian matching."""
-    from scipy.optimize import linear_sum_assignment
-
-    n_labels = max(y_true.max(), y_pred.max()) + 1
-    cost_matrix = np.zeros((n_labels, n_labels), dtype=np.int64)
-    for t, p in zip(y_true, y_pred):
-        cost_matrix[t, p] += 1
-
-    row_ind, col_ind = linear_sum_assignment(-cost_matrix)
-    mapping = dict(zip(col_ind, row_ind))
+    mapping = hungarian_match(y_true, y_pred)
 
     per_class = {}
     for c in range(n_classes):

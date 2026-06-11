@@ -8,10 +8,28 @@ import os
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
-from torchvision import datasets
+from torchvision import datasets, transforms as T
 from PIL import Image
 
 from .augmentations import CLIPAugmentation
+
+
+def _extract_targets(base_dataset):
+    """Extract target labels from a torchvision-style dataset."""
+    if hasattr(base_dataset, "targets"):
+        return np.array(base_dataset.targets)
+    elif hasattr(base_dataset, "labels"):
+        return np.array(base_dataset.labels)
+    return None
+
+
+def _ensure_pil_rgb(img):
+    """Convert a Tensor or non-RGB PIL image to an RGB PIL Image."""
+    if isinstance(img, torch.Tensor):
+        img = T.ToPILImage()(img)
+    if img.mode != 'RGB':
+        img = img.convert('RGB')
+    return img
 
 
 class ClusteringDataset(Dataset):
@@ -25,14 +43,7 @@ class ClusteringDataset(Dataset):
         self.base_dataset = base_dataset
         self.augmentation = augmentation
         self.return_index = return_index
-
-        # Extract targets
-        if hasattr(base_dataset, "targets"):
-            self.targets = np.array(base_dataset.targets)
-        elif hasattr(base_dataset, "labels"):
-            self.targets = np.array(base_dataset.labels)
-        else:
-            self.targets = None
+        self.targets = _extract_targets(base_dataset)
 
     def __len__(self):
         return len(self.base_dataset)
@@ -41,11 +52,7 @@ class ClusteringDataset(Dataset):
         img, label = self.base_dataset[idx]
 
         if self.augmentation is not None:
-            # img should be PIL Image
-            if isinstance(img, torch.Tensor):
-                img = transforms.ToPILImage()(img)
-            if img.mode != 'RGB':
-                img = img.convert('RGB')
+            img = _ensure_pil_rgb(img)
             v1, v2 = self.augmentation(img)
         else:
             v1 = img
@@ -63,13 +70,7 @@ class EvalDataset(Dataset):
     def __init__(self, base_dataset, transform=None):
         self.base_dataset = base_dataset
         self.transform = transform
-
-        if hasattr(base_dataset, "targets"):
-            self.targets = np.array(base_dataset.targets)
-        elif hasattr(base_dataset, "labels"):
-            self.targets = np.array(base_dataset.labels)
-        else:
-            self.targets = None
+        self.targets = _extract_targets(base_dataset)
 
     def __len__(self):
         return len(self.base_dataset)
@@ -78,11 +79,7 @@ class EvalDataset(Dataset):
         img, label = self.base_dataset[idx]
 
         if self.transform is not None:
-            if isinstance(img, torch.Tensor):
-                from torchvision import transforms as T
-                img = T.ToPILImage()(img)
-            if img.mode != 'RGB':
-                img = img.convert('RGB')
+            img = _ensure_pil_rgb(img)
             img = self.transform(img)
 
         return {"image": img, "label": label, "index": idx}
