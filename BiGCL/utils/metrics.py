@@ -9,6 +9,22 @@ from scipy.optimize import linear_sum_assignment
 from sklearn.metrics import normalized_mutual_info_score, adjusted_rand_score
 
 
+def _build_cost_matrix(y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
+    """Build the assignment cost matrix between true and predicted labels.
+
+    Args:
+        y_true: (N,) ground-truth labels (int64)
+        y_pred: (N,) predicted cluster assignments (int64)
+    Returns:
+        (C, C) cost matrix where C = max(y_true.max(), y_pred.max()) + 1
+    """
+    n_classes = max(y_true.max(), y_pred.max()) + 1
+    cost_matrix = np.zeros((n_classes, n_classes), dtype=np.int64)
+    for t, p in zip(y_true, y_pred):
+        cost_matrix[t, p] += 1
+    return cost_matrix
+
+
 def clustering_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """Compute clustering accuracy using the Hungarian algorithm.
 
@@ -23,14 +39,9 @@ def clustering_accuracy(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """
     y_true = np.asarray(y_true, dtype=np.int64)
     y_pred = np.asarray(y_pred, dtype=np.int64)
-
     assert y_true.shape == y_pred.shape, "Shape mismatch"
 
-    n_classes = max(y_true.max(), y_pred.max()) + 1
-    cost_matrix = np.zeros((n_classes, n_classes), dtype=np.int64)
-    for t, p in zip(y_true, y_pred):
-        cost_matrix[t, p] += 1
-
+    cost_matrix = _build_cost_matrix(y_true, y_pred)
     row_ind, col_ind = linear_sum_assignment(-cost_matrix)
     accuracy = cost_matrix[row_ind, col_ind].sum() / y_true.shape[0]
     return float(accuracy)
@@ -58,11 +69,7 @@ def hungarian_match(y_true: np.ndarray, y_pred: np.ndarray, n_classes: int = Non
     """
     y_true = np.asarray(y_true, dtype=np.int64)
     y_pred = np.asarray(y_pred, dtype=np.int64)
-    if n_classes is None:
-        n_classes = max(y_true.max(), y_pred.max()) + 1
-    cost = np.zeros((n_classes, n_classes), dtype=np.int64)
-    for t, p in zip(y_true, y_pred):
-        cost[t, p] += 1
+    cost = _build_cost_matrix(y_true, y_pred)
     row_ind, col_ind = linear_sum_assignment(-cost)
     return {int(col): int(row) for row, col in zip(row_ind, col_ind)}
 

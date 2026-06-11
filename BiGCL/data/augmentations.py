@@ -7,6 +7,11 @@ contrastive learning on image clustering benchmarks.
 import torch
 from torchvision import transforms
 
+# CLIP image normalization (OpenAI CLIP training stats)
+CLIP_MEAN = (0.48145466, 0.4578275, 0.40821073)
+CLIP_STD = (0.26862954, 0.26130258, 0.27577711)
+clip_normalize = transforms.Normalize(mean=CLIP_MEAN, std=CLIP_STD)
+
 
 class CLIPAugmentation:
     """Dual-view augmentation pipeline compatible with CLIP preprocessing.
@@ -22,11 +27,6 @@ class CLIPAugmentation:
     ):
         self.image_size = image_size
 
-        normalize = transforms.Normalize(
-            mean=(0.48145466, 0.4578275, 0.40821073),
-            std=(0.26862954, 0.26130258, 0.27577711),
-        )
-
         # Strong augmentation view
         self.strong_transform = transforms.Compose([
             transforms.RandomResizedCrop(image_size, scale=(0.2, 1.0)),
@@ -40,7 +40,7 @@ class CLIPAugmentation:
             ], p=0.5),
             transforms.RandomSolarize(threshold=128, p=0.1),
             transforms.ToTensor(),
-            normalize,
+            clip_normalize,
         ])
 
         # Weak augmentation view
@@ -51,7 +51,7 @@ class CLIPAugmentation:
                 transforms.ColorJitter(0.2, 0.2, 0.2, 0.05)
             ], p=0.5),
             transforms.ToTensor(),
-            normalize,
+            clip_normalize,
         ])
 
         # Evaluation transform (no augmentation)
@@ -59,7 +59,7 @@ class CLIPAugmentation:
             transforms.Resize(image_size, interpolation=transforms.InterpolationMode.BICUBIC),
             transforms.CenterCrop(image_size),
             transforms.ToTensor(),
-            normalize,
+            clip_normalize,
         ])
 
         self.strong = strong
@@ -90,11 +90,6 @@ class MultiCropAugmentation:
         local_scale: tuple = (0.05, 0.4),
         local_size: int = 96,
     ):
-        normalize = transforms.Normalize(
-            mean=(0.48145466, 0.4578275, 0.40821073),
-            std=(0.26862954, 0.26130258, 0.27577711),
-        )
-
         self.n_global = n_global
         self.n_local = n_local
 
@@ -109,7 +104,7 @@ class MultiCropAugmentation:
                 transforms.GaussianBlur(kernel_size=23, sigma=(0.1, 2.0))
             ], p=0.5),
             transforms.ToTensor(),
-            normalize,
+            clip_normalize,
         ])
 
         self.local_transform = transforms.Compose([
@@ -120,7 +115,7 @@ class MultiCropAugmentation:
             ], p=0.8),
             transforms.RandomGrayscale(p=0.2),
             transforms.ToTensor(),
-            normalize,
+            clip_normalize,
         ])
 
     def __call__(self, image):

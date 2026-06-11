@@ -6,22 +6,17 @@ Usage:
 """
 
 import os
-import sys
 import argparse
 import time
-import logging
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
 import yaml
-from tqdm import tqdm
 
-from models.bigcl import BiGCL
+from models.factory import build_model_from_config
 from models.clustering_head import ProgressiveSelfTrainer
 from data.datasets import build_dataset, build_dataloader
-from utils.metrics import evaluate_clustering
+from utils.evaluation import evaluate_model
 from utils.misc import (
     set_seed,
     AverageMeter,
@@ -89,40 +84,6 @@ def load_config(args):
     return cfg
 
 
-def build_model(cfg, device):
-    """Instantiate BiGCL model from config."""
-    model_cfg = cfg["model"]
-    loss_cfg = cfg["loss"]
-
-    model = BiGCL(
-        clip_model_name=model_cfg["clip_model_name"],
-        clip_pretrained=model_cfg["clip_pretrained"],
-        n_clusters=model_cfg["n_clusters"],
-        proj_dim=model_cfg["proj_dim"],
-        n_ctx=model_cfg["n_ctx"],
-        gnn_layers=model_cfg["gnn_layers"],
-        gnn_heads=model_cfg["gnn_heads"],
-        gnn_top_k=model_cfg["gnn_top_k"],
-        gnn_temperature=model_cfg["gnn_temperature"],
-        feat_drop_rate=model_cfg["feat_drop_rate"],
-        edge_drop_rate=model_cfg["edge_drop_rate"],
-        sinkhorn_iters=model_cfg["sinkhorn_iters"],
-        node_temperature=loss_cfg["node_temperature"],
-        cross_temperature=loss_cfg["cross_temperature"],
-        graph_temperature=loss_cfg["graph_temperature"],
-        w_node=loss_cfg["w_node"],
-        w_cross=loss_cfg["w_cross"],
-        w_graph=loss_cfg["w_graph"],
-        w_uniform=loss_cfg["w_uniform"],
-        w_entropy=loss_cfg["w_entropy"],
-        w_self_train=loss_cfg["w_self_train"],
-        use_momentum=model_cfg["use_momentum"],
-        base_momentum=model_cfg["base_momentum"],
-        dropout=model_cfg["dropout"],
-    )
-    return model.to(device)
-
-
 def build_optimizer(model, cfg):
     """Build optimizer with parameter-group-specific learning rates."""
     train_cfg = cfg["training"]
@@ -147,32 +108,9 @@ def build_optimizer(model, cfg):
     return optimizer
 
 
-@torch.no_grad()
 def evaluate(model, eval_loader, device, logger):
     """Run evaluation and compute clustering metrics."""
-    model.eval()
-    all_labels = []
-    all_preds = []
-    all_features = []
-
-    for batch in tqdm(eval_loader, desc="Evaluating", leave=False):
-        images = batch["image"].to(device)
-        labels = batch["label"]
-
-        out = model.extract_features(images)
-        all_preds.append(out["hard_labels"].cpu().numpy())
-        all_labels.append(labels.numpy())
-        all_features.append(out["features"].cpu().numpy())
-
-    all_preds = np.concatenate(all_preds)
-    all_labels = np.concatenate(all_labels)
-    all_features = np.concatenate(all_features)
-
-    metrics = evaluate_clustering(all_labels, all_preds)
-    logger.info(
-        f"  ACC={metrics['ACC']:.4f}  NMI={metrics['NMI']:.4f}  ARI={metrics['ARI']:.4f}"
-    )
-    return metrics, all_features
+    return evaluate_model(model, eval_loader, device, logger)
 
 
 def train_one_epoch(
@@ -311,7 +249,7 @@ def main():
     logger.info(f"Number of clusters: {n_clusters}")
 
     # Build model
-    model = build_model(cfg, device)
+    model = build_model_from_config(cfg, device)
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info(f"Trainable parameters: {n_params:,}")
 
