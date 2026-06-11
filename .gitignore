@@ -1,0 +1,50 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets and credentials
+.env
+.env.*
+*.pem
+*.key
+
+# Datasets (large files, downloaded at runtime)
+datasets/
+data/raw/
+
+# Model checkpoints and outputs
+results/
+output/
+*.pth
+*.pt
+*.ckpt
+
+# Logs
+*.log
+wandb/
+
+# Jupyter
+.ipynb_checkpoints/
